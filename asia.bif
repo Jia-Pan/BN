@@ -25,35 +25,35 @@ variable dysp {
   type discrete [ 2 ] { yes, no };
 }
 probability ( asia ) {
-  table 0.01, 0.99;
+  table 0.40, 0.60;
 }
 probability ( tub | asia ) {
-  (yes) 0.05, 0.95;
-  (no) 0.01, 0.99;
+  (yes) 0.33, 0.67;
+  (no) 0.90, 0.10;
 }
 probability ( smoke ) {
   table 0.5, 0.5;
 }
 probability ( lung | smoke ) {
   (yes) 0.1, 0.9;
-  (no) 0.01, 0.99;
+  (no) 0.20, 0.80;
 }
 probability ( bronc | smoke ) {
   (yes) 0.6, 0.4;
   (no) 0.3, 0.7;
 }
 probability ( either | lung, tub ) {
-  (yes, yes) 1.0, 0.0;
-  (no, yes) 1.0, 0.0;
-  (yes, no) 1.0, 0.0;
-  (no, no) 0.0, 1.0;
+  (yes, yes) 0.09, 0.91;
+  (no, yes) 0.74, 0.26;
+  (yes, no) 0.7, 0.3;
+  (no, no) 0.13, 0.87;
 }
 probability ( xray | either ) {
   (yes) 0.98, 0.02;
   (no) 0.05, 0.95;
 }
 probability ( dysp | bronc, either ) {
-  (yes, yes) 0.9, 0.1;
+  (yes, yes) 0.4, 0.6;
   (no, yes) 0.7, 0.3;
   (yes, no) 0.8, 0.2;
   (no, no) 0.1, 0.9;

@@ -128,7 +128,25 @@ class BayesianNetwork:
                 value = table_re.match(_probabilities)
                 var = self.get_variable(_name)
                 var.probabilities = dict(zip(var.domain, [float(v.strip()) for v in value.group(1).split(',')]))
-                  
+
+    def get_variable(self, name):
+        """
+        Returns the instance of the Variable class with name: name
+        :param name: the name of the sought variable
+        :return: the Variable instance
+        """
+        for var in self.variables:
+            if var.name == name:
+                return var
+            
+    
+    
+    
+    '''
+    The methods listed below where written for the assignment
+    '''
+
+
     def define_markov_blankets(self):
         '''
         In a Bayesian network, the Markov blanket of a node includes its parents,
@@ -153,16 +171,131 @@ class BayesianNetwork:
 
         for v in self.variables:
             v.markov_blanket = list(mb[v.name])
+            
+            
+    def generate_sample(self):
+        s = dict()
+        for v in self.variables:
+            s[v.name] = random.choice(v.domain)
+        return s
+    
+    
+    def generate_numbers(self,size=1000):
+        t_size = size * len(self.variables) + 1
+        return [random.uniform(0,1) for x in range(t_size)]
+    
+    
+    def gibbs_sampling(self,iterations=1000, warm_up=100,debug=False):
+        
+        iterations += warm_up
+        numbers = self.generate_numbers(iterations)
+        sample = self.generate_sample()
+        i = 0
+        results = dict()
+        
+        while True:
 
-    def get_variable(self, name):
-        """
-        Returns the instance of the Variable class with name: name
-        :param name: the name of the sought variable
-        :return: the Variable instance
-        """
-        for var in self.variables:
-            if var.name == name:
-                return var
+            for v in sample: # for each random value in the sample
+                cur = self.get_variable(v)
+                mb = cur.markov_blanket
+
+                probs = []
+                for node in mb+[v]: # for every node in the markov blanket
+                    n = self.get_variable(node)
+
+                    #get the values 
+                    t = []
+
+                    if len(n.parents) == 0: # has no parents
+
+                        if node == v: # if it is node that we're trying to calculate
+                            probs.append(n.probabilities)
+                        else: 
+                            probs.append(n.probabilities[sample[node]])
+
+                    else: # has parents
+
+                        if v in n.parents: # if our target node is one of the parents
+                                           # create a new dictionary
+                            tmp1 = {}
+                            for d in cur.domain:
+                                tmp = []
+                                for par in n.parents:
+                                    if par == v:
+                                        tmp.append(d)
+                                    else:
+                                        tmp.append(sample[par])
+                                tmp1[d] = n.get_probability(tmp)[sample[node]]
+                            #print(tmp1)
+                            probs.append(tmp1)
+
+                        else:
+                            #t = []
+                            leave = 0
+                            for par in n.parents:
+                                t.append(sample[par])
+
+                            if node == v:
+                                probs.append(n.get_probability(t))
+                                leave = 1
+
+                            elif leave == 0:
+                                probs.append(n.get_probability(t)[sample[node]])
+
+                #print(v,'\nprobs : ',probs)
+                denom = 0.0
+                d_dict = dict()
+                for d in cur.domain:
+                    tmp = 1.0
+                    for p in probs:
+                        if type(p)==type({}): # if p is a dictonary, get a value
+                            tmp *= p[d]
+                        else:
+                            tmp *= p
+                    d_dict[d] = tmp
+                    denom += tmp
+
+
+
+                #print('antes de normalizar',d_dict)
+                if denom == 0.0: denom = 1.0
+                for d in d_dict:
+                    d_dict[d] /= denom
+                #print('depois de normalizar',d_dict)    
+
+                d_dict = {k: v for k, v in sorted(d_dict.items(), key=lambda item: item[1], reverse=True)}
+                #print('depois de ordenar',d_dict)
+
+                s_dict = d_dict.copy()
+                l_value = 0.0
+                for k in s_dict:
+                    s_dict[k] += l_value
+                    l_value = s_dict[k]
+                #print('depois de somar',s_dict,'\n\n')
+
+                rand = numbers.pop()
+                for k in s_dict:
+                    if rand <= s_dict[k]:
+                        sample[v] = k
+
+                results[v] = d_dict.copy()
+            #print(results['VENTLUNG'])
+
+            l = []
+            for x in results:
+                for y in results[x]:
+                    l.append(results[x][y])
+            if i > 0:
+                d = distance.euclidean(l, l1)
+                #print(d)
+            l1 = l.copy()
+            #print(results['Earthquake']['True'],end='\r')
+            i+=1
+            if i == iterations:
+                break
+                
+from scipy.spatial import distance
+import random
             
 # bn = BayesianNetwork(file='earthquake.bif')  # example usage for the supplied earthquake.bif file
 # for v in bn.variables:
