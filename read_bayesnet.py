@@ -184,11 +184,12 @@ class BayesianNetwork:
         return [random.uniform(0,1) for x in range(t_size)]
     
     
-    def gibbs_sampling(self,iterations=10000, warm_up=100, evidence={}, debug=False):
+    def gibbs_sampling(self,iterations=10000, warm_up=100, evidence={}, query=False, debug=False):
         
         iterations += warm_up
         numbers = self.generate_numbers(iterations)
         sample = self.generate_sample()
+        df = pd.DataFrame()
         
         for k in evidence:
             sample[k] = evidence[k]
@@ -288,6 +289,9 @@ class BayesianNetwork:
                 d = distance.euclidean(l, l1)
                 #print(d)
             l1 = l.copy()
+            if not query:
+                if self.file == 'asia.bif':
+                    df = df.append(results,ignore_index=True)
             #print(results['Earthquake']['True'],end='\r')
             i+=1
             if i == iterations:
@@ -296,7 +300,11 @@ class BayesianNetwork:
         for k in results:
             for v in results[k]:
                 results[k][v] = round(results[k][v],2)
-        return results
+        if not query:
+            if self.file == 'asia.bif':
+                df = df.applymap(lambda x : x['yes'])
+        return results, df
+    
     
     def exists(self,name):
         exists = False
@@ -304,6 +312,7 @@ class BayesianNetwork:
             if name == v.name:
                 return True
         return False
+    
     
     def has_domain(self,name,value):
         v = self.get_variable(name)
@@ -315,6 +324,7 @@ class BayesianNetwork:
                 
 from scipy.spatial import distance
 import random
+import pandas as pd
             
 # bn = BayesianNetwork(file='earthquake.bif')  # example usage for the supplied earthquake.bif file
 # for v in bn.variables:

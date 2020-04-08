@@ -32,7 +32,8 @@ def main():
             if not bn.exists(q[0]):
                 print('Variable not found')
             else:
-                result = bn.gibbs_sampling()[q[0]]
+                result, _ = bn.gibbs_sampling(query=True)
+                result = result[q[0]]
                 print(result)
                 
         elif len(q) > 1: # has evidence
@@ -49,7 +50,8 @@ def main():
                 else:
                     print('Variable not found')
             
-            result = bn.gibbs_sampling(evidence=e_dict)[q[0]]
+            result, _ = bn.gibbs_sampling(evidence=e_dict,query=True)
+            result = result[q[0]]
             print(result)
                 
         else:
