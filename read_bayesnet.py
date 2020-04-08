@@ -151,7 +151,6 @@ class BayesianNetwork:
         '''
         In a Bayesian network, the Markov blanket of a node includes its parents,
          children and the other parents of all of its children.
-        Not in the original file.
         '''
 
         mb = dict()
@@ -180,16 +179,20 @@ class BayesianNetwork:
         return s
     
     
-    def generate_numbers(self,size=1000):
+    def generate_numbers(self,size):
         t_size = size * len(self.variables) + 1
         return [random.uniform(0,1) for x in range(t_size)]
     
     
-    def gibbs_sampling(self,iterations=1000, warm_up=100,debug=False):
+    def gibbs_sampling(self,iterations=10000, warm_up=100, evidence={}, debug=False):
         
         iterations += warm_up
         numbers = self.generate_numbers(iterations)
         sample = self.generate_sample()
+        
+        for k in evidence:
+            sample[k] = evidence[k]
+        
         i = 0
         results = dict()
         
@@ -202,9 +205,6 @@ class BayesianNetwork:
                 probs = []
                 for node in mb+[v]: # for every node in the markov blanket
                     n = self.get_variable(node)
-
-                    #get the values 
-                    t = []
 
                     if len(n.parents) == 0: # has no parents
 
@@ -226,11 +226,10 @@ class BayesianNetwork:
                                     else:
                                         tmp.append(sample[par])
                                 tmp1[d] = n.get_probability(tmp)[sample[node]]
-                            #print(tmp1)
                             probs.append(tmp1)
 
                         else:
-                            #t = []
+                            t = []
                             leave = 0
                             for par in n.parents:
                                 t.append(sample[par])
@@ -275,7 +274,7 @@ class BayesianNetwork:
 
                 rand = numbers.pop()
                 for k in s_dict:
-                    if rand <= s_dict[k]:
+                    if rand <= s_dict[k] and v not in evidence:
                         sample[v] = k
 
                 results[v] = d_dict.copy()
@@ -293,6 +292,26 @@ class BayesianNetwork:
             i+=1
             if i == iterations:
                 break
+                
+        for k in results:
+            for v in results[k]:
+                results[k][v] = round(results[k][v],2)
+        return results
+    
+    def exists(self,name):
+        exists = False
+        for v in self.variables:
+            if name == v.name:
+                return True
+        return False
+    
+    def has_domain(self,name,value):
+        v = self.get_variable(name)
+        if value in v.domain:
+            return True
+        return False
+            
+            
                 
 from scipy.spatial import distance
 import random
