@@ -16,7 +16,7 @@ def main():
             break
         
     try:
-        bn = BayesianNetwork(file='asia.bif')
+        bn = BayesianNetwork(file=file)
         print('Done\nTry a query! ex: Pr? asia  or  Pr? asia|dysp=yes')
     except e:
         print('\nSomething went wrong. Please try another file')
