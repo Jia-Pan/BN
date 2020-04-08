@@ -152,7 +152,7 @@ class BayesianNetwork:
         In a Bayesian network, the Markov blanket of a node includes its parents,
          children and the other parents of all of its children.
         '''
-
+        
         mb = dict()
         for v in self.variables:
             mb[v.name] = set()
@@ -185,6 +185,8 @@ class BayesianNetwork:
     
     
     def gibbs_sampling(self,iterations=10000, warm_up=100, evidence={}, query=False, debug=False):
+        
+        self.parse_file() # reset probabilities
         
         iterations += warm_up
         numbers = self.generate_numbers(iterations)
@@ -277,6 +279,18 @@ class BayesianNetwork:
                 for k in s_dict:
                     if rand <= s_dict[k] and v not in evidence:
                         sample[v] = k
+                        
+                #update probabilities
+                if len(cur.parents) == 0:
+                    for d in cur.domain:
+                        cur.probabilities[d] = d_dict[d]
+                else:
+                    l = []
+                    for p in cur.parents:
+                        l.append(sample[p])
+                    l = tuple(l)
+                    for d in cur.domain:
+                        cur.probabilities[l][d] = d_dict[d]
 
                 results[v] = d_dict.copy()
             #print(results['VENTLUNG'])
