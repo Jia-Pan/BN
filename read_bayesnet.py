@@ -172,9 +172,11 @@ class BayesianNetwork:
             v.markov_blanket = list(mb[v.name])
             
             
-    def generate_sample(self):
+    def generate_sample(self,evidence):
         s = dict()
         for v in self.variables:
+            if v.name in evidence:
+                s[v.name] = evidence[v.name]
             s[v.name] = random.choice(v.domain)
         return s
     
@@ -182,6 +184,7 @@ class BayesianNetwork:
     def generate_numbers(self,size):
         t_size = size * len(self.variables) + 1
         return [random.uniform(0,1) for x in range(t_size)]
+        #return [random.random() for x in range(t_size)]
     
     
     def gibbs_sampling(self,iterations=10000, warm_up=100, evidence={}, query=False, debug=False):
@@ -190,16 +193,22 @@ class BayesianNetwork:
         
         iterations += warm_up
         numbers = self.generate_numbers(iterations)
-        sample = self.generate_sample()
+        sample = self.generate_sample(evidence)
+        prev_sample = sample.copy()
+        #print(numbers)
         df = pd.DataFrame()
-        
-        for k in evidence:
-            sample[k] = evidence[k]
+          
+        print(sample)
+        changed_sample = False
+        sim = 0 
+          
         
         i = 0
         results = dict()
         
         while True:
+            
+            
 
             for v in sample: # for each random value in the sample
                 cur = self.get_variable(v)
@@ -221,6 +230,7 @@ class BayesianNetwork:
                         if v in n.parents: # if our target node is one of the parents
                                            # create a new dictionary
                             tmp1 = {}
+                            denom = 0.0
                             for d in cur.domain:
                                 tmp = []
                                 for par in n.parents:
@@ -228,7 +238,15 @@ class BayesianNetwork:
                                         tmp.append(d)
                                     else:
                                         tmp.append(sample[par])
+                                     
                                 tmp1[d] = n.get_probability(tmp)[sample[node]]
+                                denom += tmp1[d]
+                                #print('denom -> ', denom)
+                            #print('antes tmp1 -> ',tmp1)    
+                            if denom == 0.0 : denom = 1.0    
+                            for d in cur.domain:
+                                tmp1[d] /= denom
+                            #print('depois tmp1 -> ',tmp1)    
                             probs.append(tmp1)
 
                         else:
@@ -239,12 +257,13 @@ class BayesianNetwork:
 
                             if node == v:
                                 probs.append(n.get_probability(t))
+                                #print(n.get_probability(t))
                                 leave = 1
 
                             elif leave == 0:
                                 probs.append(n.get_probability(t)[sample[node]])
 
-                #print(v,'\nprobs : ',probs)
+                #print(v,'\nprobs : ',probs,'\n')
                 denom = 0.0
                 d_dict = dict()
                 for d in cur.domain:
@@ -275,11 +294,15 @@ class BayesianNetwork:
                     l_value = s_dict[k]
                 #print('depois de somar',s_dict,'\n\n')
 
-                rand = numbers.pop()
+                # update sample
+                if not changed_sample:
+                    prev_sample = sample.copy()
+                rand = numbers[i]
                 for k in s_dict:
                     if rand <= s_dict[k] and v not in evidence:
                         sample[v] = k
-                        
+                       
+                 
                 #update probabilities
                 if len(cur.parents) == 0:
                     for d in cur.domain:
@@ -291,10 +314,30 @@ class BayesianNetwork:
                     l = tuple(l)
                     for d in cur.domain:
                         cur.probabilities[l][d] = d_dict[d]
-
+                
+                        
                 results[v] = d_dict.copy()
+                #print(v,'\n',d_dict,'\n')
             #print(results['VENTLUNG'])
-
+            
+            '''
+            print(sample)
+            if i < warm_up:
+                prev_sample_l = ' '.join([prev_sample[k] for k in prev_sample])
+                sample_l = ' '.join([sample[k] for k in sample])
+                
+                sim = self.similar(prev_sample_l,sample_l)
+                if sim > 0.:
+                    changed_sample = True
+                    prev_sample = sample.copy()
+                    sample = self.generate_sample(evidence)
+                else:
+                    changed_sample = False
+                print(sim)
+            else:
+                changed_sample = False
+            '''
+                
             l = []
             for x in results:
                 for y in results[x]:
@@ -303,10 +346,17 @@ class BayesianNetwork:
                 d = distance.euclidean(l, l1)
                 #print(d)
             l1 = l.copy()
+            
+            # for plots
             if not query:
                 if self.file == 'asia.bif':
                     df = df.append(results,ignore_index=True)
-            #print(results['Earthquake']['True'],end='\r')
+                    
+            
+                
+                
+            
+            
             i+=1
             if i == iterations:
                 break
@@ -333,12 +383,17 @@ class BayesianNetwork:
         if value in v.domain:
             return True
         return False
+    
+    
+    def similar(self,a, b):
+        return SequenceMatcher(None, a, b).ratio()
             
             
                 
 from scipy.spatial import distance
 import random
 import pandas as pd
+from difflib import SequenceMatcher
             
 # bn = BayesianNetwork(file='earthquake.bif')  # example usage for the supplied earthquake.bif file
 # for v in bn.variables:
