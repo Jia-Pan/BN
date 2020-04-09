@@ -152,7 +152,7 @@ class BayesianNetwork:
         In a Bayesian network, the Markov blanket of a node includes its parents,
          children and the other parents of all of its children.
         '''
-
+        
         mb = dict()
         for v in self.variables:
             mb[v.name] = set()
@@ -172,33 +172,42 @@ class BayesianNetwork:
             v.markov_blanket = list(mb[v.name])
             
             
-    def generate_sample(self):
+    def generate_sample(self,evidence):
         s = dict()
         for v in self.variables:
+            if v.name in evidence:
+                s[v.name] = evidence[v.name]
             s[v.name] = random.choice(v.domain)
         return s
     
     
     def generate_numbers(self,size):
-        t_size = size * len(self.variables) + 1
-        return [random.uniform(0,1) for x in range(t_size)]
+        size = size * len(self.variables)
+        return [random.uniform(0,1) for x in range(size)]
+        #return [random.random() for x in range(t_size)]
     
     
     def gibbs_sampling(self,iterations=10000, warm_up=100, evidence={}, query=False, debug=False):
         
+        self.parse_file() # reset probabilities
+        
         iterations += warm_up
         numbers = self.generate_numbers(iterations)
-        sample = self.generate_sample()
+        sample = self.generate_sample(evidence)
+        prev_sample = sample.copy()
+        #print(numbers)
         df = pd.DataFrame()
-        
-        for k in evidence:
-            sample[k] = evidence[k]
+          
+        print(sample)
+          
         
         i = 0
         results = dict()
         
-        while True:
-
+        samples = dict()
+        samples[i] = sample.copy()
+        
+        while i < iterations: 
             for v in sample: # for each random value in the sample
                 cur = self.get_variable(v)
                 mb = cur.markov_blanket
@@ -209,40 +218,34 @@ class BayesianNetwork:
 
                     if len(n.parents) == 0: # has no parents
 
-                        if node == v: # if it is node that we're trying to calculate
-                            probs.append(n.probabilities)
-                        else: 
-                            probs.append(n.probabilities[sample[node]])
+                        # if it is node that we're trying to calculate get the value directly. if not, get value from sample
+                        probs.append(n.probabilities) if node == v else probs.append(n.probabilities[sample[node]])
 
                     else: # has parents
 
                         if v in n.parents: # if our target node is one of the parents
                                            # create a new dictionary
                             tmp1 = {}
+                            denom = 0.0
                             for d in cur.domain:
                                 tmp = []
                                 for par in n.parents:
-                                    if par == v:
-                                        tmp.append(d)
-                                    else:
-                                        tmp.append(sample[par])
+                                    tmp.append(d) if par == v else tmp.append(sample[par])
+                                     
                                 tmp1[d] = n.get_probability(tmp)[sample[node]]
+                                denom += tmp1[d]
+                                    
+                            if denom == 0.0 : denom = 1.0    
+                            for d in cur.domain: tmp1[d] /= denom
                             probs.append(tmp1)
 
                         else:
-                            t = []
-                            leave = 0
+                            tmp = []
                             for par in n.parents:
-                                t.append(sample[par])
+                                tmp.append(sample[par])
 
-                            if node == v:
-                                probs.append(n.get_probability(t))
-                                leave = 1
+                            probs.append(n.get_probability(tmp)) if node == v else probs.append(n.get_probability(tmp)[sample[node]])
 
-                            elif leave == 0:
-                                probs.append(n.get_probability(t)[sample[node]])
-
-                #print(v,'\nprobs : ',probs)
                 denom = 0.0
                 d_dict = dict()
                 for d in cur.domain:
@@ -273,36 +276,39 @@ class BayesianNetwork:
                     l_value = s_dict[k]
                 #print('depois de somar',s_dict,'\n\n')
 
+                # update sample
                 rand = numbers.pop()
                 for k in s_dict:
                     if rand <= s_dict[k] and v not in evidence:
                         sample[v] = k
-
-                results[v] = d_dict.copy()
-            #print(results['VENTLUNG'])
-
-            l = []
-            for x in results:
-                for y in results[x]:
-                    l.append(results[x][y])
-            if i > 0:
-                d = distance.euclidean(l, l1)
-                #print(d)
-            l1 = l.copy()
-            if not query:
-                if self.file == 'asia.bif':
-                    df = df.append(results,ignore_index=True)
-            #print(results['Earthquake']['True'],end='\r')
+                    
+            print(sample)
             i+=1
-            if i == iterations:
-                break
+            
+            samples[i] = sample.copy()     
+            
+            results = dict()
+            for var in self.variables:
+                new_prob = dict()
+                for d in var.domain:
+                    new_prob[d] = 0.0
+                    for samp in samples:
+                        if samples[samp][var.name] == d:
+                            new_prob[d] += 1.0
+                    new_prob[d] /= len(samples)
+                results[var.name] = new_prob.copy()
+              
+            # for plots
+            if not query and self.file == 'asia.bif':
+                    df = df.append(results,ignore_index=True)
                 
+        if not query and self.file == 'asia.bif':
+            df = df.applymap(lambda x : x['yes'])
+        
         for k in results:
             for v in results[k]:
                 results[k][v] = round(results[k][v],2)
-        if not query:
-            if self.file == 'asia.bif':
-                df = df.applymap(lambda x : x['yes'])
+                
         return results, df
     
     
@@ -319,12 +325,17 @@ class BayesianNetwork:
         if value in v.domain:
             return True
         return False
+    
+    
+    def similar(self,a, b):
+        return SequenceMatcher(None, a, b).ratio()
             
             
                 
 from scipy.spatial import distance
 import random
 import pandas as pd
+from difflib import SequenceMatcher
             
 # bn = BayesianNetwork(file='earthquake.bif')  # example usage for the supplied earthquake.bif file
 # for v in bn.variables:
