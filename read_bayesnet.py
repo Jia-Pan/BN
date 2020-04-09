@@ -182,8 +182,8 @@ class BayesianNetwork:
     
     
     def generate_numbers(self,size):
-        t_size = size * len(self.variables) + 1
-        return [random.uniform(0,1) for x in range(t_size)]
+        size = size * len(self.variables)
+        return [random.uniform(0,1) for x in range(size)]
         #return [random.random() for x in range(t_size)]
     
     
@@ -206,9 +206,10 @@ class BayesianNetwork:
         i = 0
         results = dict()
         
+        samples = dict()
+        samples[i] = sample.copy()
+        
         while True:
-            
-            
 
             for v in sample: # for each random value in the sample
                 cur = self.get_variable(v)
@@ -297,76 +298,52 @@ class BayesianNetwork:
                 # update sample
                 if not changed_sample:
                     prev_sample = sample.copy()
-                rand = numbers[i]
+                rand = numbers.pop()
                 for k in s_dict:
                     if rand <= s_dict[k] and v not in evidence:
                         sample[v] = k
-                       
                  
-                #update probabilities
-                if len(cur.parents) == 0:
-                    for d in cur.domain:
-                        cur.probabilities[d] = d_dict[d]
-                else:
-                    l = []
-                    for p in cur.parents:
-                        l.append(sample[p])
-                    l = tuple(l)
-                    for d in cur.domain:
-                        cur.probabilities[l][d] = d_dict[d]
-                
-                        
-                results[v] = d_dict.copy()
-                #print(v,'\n',d_dict,'\n')
-            #print(results['VENTLUNG'])
+                #results[v] = d_dict.copy()
+
             
-            '''
+
+                    
             print(sample)
-            if i < warm_up:
-                prev_sample_l = ' '.join([prev_sample[k] for k in prev_sample])
-                sample_l = ' '.join([sample[k] for k in sample])
-                
-                sim = self.similar(prev_sample_l,sample_l)
-                if sim > 0.:
-                    changed_sample = True
-                    prev_sample = sample.copy()
-                    sample = self.generate_sample(evidence)
-                else:
-                    changed_sample = False
-                print(sim)
-            else:
-                changed_sample = False
-            '''
-                
-            l = []
-            for x in results:
-                for y in results[x]:
-                    l.append(results[x][y])
-            if i > 0:
-                d = distance.euclidean(l, l1)
-                #print(d)
-            l1 = l.copy()
+            i+=1
+            samples[i] = sample.copy()     
             
+            results = dict()
+            for var in self.variables:
+                new_prob = dict()
+                for d in var.domain:
+                    new_prob[d] = 0.0
+                    for samp in samples:
+                        if samples[samp][var.name] == d:
+                            new_prob[d] += 1.0
+                    new_prob[d] /= len(samples)
+                results[var.name] = new_prob.copy()
+            #print(results)
+              
+           
             # for plots
             if not query:
                 if self.file == 'asia.bif':
                     df = df.append(results,ignore_index=True)
-                    
-            
                 
-                
+                        
+            #print(var.name,'\n', new_prob) 
             
-            
-            i+=1
             if i == iterations:
                 break
                 
         for k in results:
             for v in results[k]:
                 results[k][v] = round(results[k][v],2)
+                
         if not query:
             if self.file == 'asia.bif':
                 df = df.applymap(lambda x : x['yes'])
+                
         return results, df
     
     
