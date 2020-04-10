@@ -156,6 +156,8 @@ class BayesianNetwork:
         mb = dict()
         for v in self.variables:
             mb[v.name] = set()
+            
+            mb[v.name].add(v.name)
 
 
         for v in self.variables:
@@ -163,10 +165,10 @@ class BayesianNetwork:
             for p in v.parents:
                 mb[v.name].add(p)
                 mb[p].add(v.name)
-                for p1 in v.parents:
-                    if p != p1:
-                        mb[p].add(p1)
-                        mb[p1].add(p)
+                #for p1 in v.parents:
+                #    if p != p1:
+                #        mb[p].add(p1)
+                #        mb[p1].add(p)
 
         for v in self.variables:
             v.markov_blanket = list(mb[v.name])
@@ -185,6 +187,13 @@ class BayesianNetwork:
         size = size * len(self.variables)
         return [random.uniform(0,1) for x in range(size)]
         #return [random.random() for x in range(t_size)]
+       
+    
+    def generate_monitor(self):
+        tmp = dict()
+        for v in self.variables:
+            tmp[v.name] = random.choice(v.domain)
+        return tmp
     
     
     def gibbs_sampling(self,iterations=10000, warm_up=100, evidence={}, query=False, debug=False):
@@ -195,6 +204,7 @@ class BayesianNetwork:
         numbers = self.generate_numbers(iterations)
         sample = self.generate_sample(evidence)
         prev_sample = sample.copy()
+        monitor = self.generate_monitor()
         #print(numbers)
         df = pd.DataFrame()
           
@@ -208,79 +218,88 @@ class BayesianNetwork:
         samples[i] = sample.copy()
         
         while i < iterations: 
+            print(i, end='\r')
+            
             for v in sample: # for each random value in the sample
-                cur = self.get_variable(v)
-                mb = cur.markov_blanket
+                if v not in evidence:
+                    cur = self.get_variable(v)
+                    mb = cur.markov_blanket
 
-                probs = []
-                for node in mb+[v]: # for every node in the markov blanket
-                    n = self.get_variable(node)
+                    probs = []
+                    for node in mb: # for every node in the markov blanket
+                        n = self.get_variable(node)
 
-                    if len(n.parents) == 0: # has no parents
+                        if len(n.parents) == 0: # has no parents
+                            probs.append(n.probabilities) if v == n.name else probs.append(n.probabilities[sample[n.name]])
 
-                        # if it is node that we're trying to calculate get the value directly. if not, get value from sample
-                        probs.append(n.probabilities) if node == v else probs.append(n.probabilities[sample[node]])
-
-                    else: # has parents
-
-                        if v in n.parents: # if our target node is one of the parents
-                                           # create a new dictionary
-                            tmp1 = {}
-                            denom = 0.0
-                            for d in cur.domain:
+                        elif len(n.parents) > 0: # has parents
+                            
+                            
+                            #  {('yes',): {'yes': 0.98, 'no': 0.02}, ('no',): {'yes': 0.05, 'no': 0.95}} 
+                            
+                            
+                            if v in n.parents: # main node is part of parents of markov blanket node
+                                tmp1 = dict()
+                                denom = 0.0
+                                for d in cur.domain:
+                                    tmp = []
+                                    for par in n.parents:
+                                        tmp.append(d) if par == v else tmp.append(sample[par])
+                                        
+                                    tmp1[d] = n.get_probability(tmp)[sample[node]]
+                                    denom += tmp1[d]
+                                
+                                #if denom == 0.0 : denom = 1.0  
+                                    
+                                for d in cur.domain: 
+                                    tmp1[d] /= denom
+                                probs.append(tmp1)
+                                        
+                            else:
                                 tmp = []
                                 for par in n.parents:
-                                    tmp.append(d) if par == v else tmp.append(sample[par])
-                                     
-                                tmp1[d] = n.get_probability(tmp)[sample[node]]
-                                denom += tmp1[d]
-                                    
-                            if denom == 0.0 : denom = 1.0    
-                            for d in cur.domain: tmp1[d] /= denom
-                            probs.append(tmp1)
+                                    tmp.append(sample[par])
+                                
+                                probs.append(n.get_probability(tmp))
+                                
+                    #print(v)
+                    #print(probs)
 
-                        else:
-                            tmp = []
-                            for par in n.parents:
-                                tmp.append(sample[par])
-
-                            probs.append(n.get_probability(tmp)) if node == v else probs.append(n.get_probability(tmp)[sample[node]])
-
-                denom = 0.0
-                d_dict = dict()
-                for d in cur.domain:
-                    tmp = 1.0
-                    for p in probs:
-                        if type(p)==type({}): # if p is a dictonary, get a value
-                            tmp *= p[d]
-                        else:
-                            tmp *= p
-                    d_dict[d] = tmp
-                    denom += tmp
+                    denom = 0.0
+                    d_dict = dict()
+                    for d in cur.domain:
+                        tmp = 1.0
+                        for p in probs:
+                            if type(p)==type({}): # if p is a dictonary, get a value
+                                tmp *= p[d]
+                            else:
+                                tmp *= p
+                        d_dict[d] = tmp
+                        denom += tmp
 
 
+                    #print(v)
+                    #print('antes de normalizar',d_dict)
+                    if denom == 0.0: denom = 1.0
+                    for d in d_dict:
+                        d_dict[d] /= denom
+                    #print('depois de normalizar',d_dict)    
 
-                #print('antes de normalizar',d_dict)
-                if denom == 0.0: denom = 1.0
-                for d in d_dict:
-                    d_dict[d] /= denom
-                #print('depois de normalizar',d_dict)    
+                    d_dict = {k: v for k, v in sorted(d_dict.items(), key=lambda item: item[1], reverse=True)}
+                    #print('depois de ordenar',d_dict)
 
-                d_dict = {k: v for k, v in sorted(d_dict.items(), key=lambda item: item[1], reverse=True)}
-                #print('depois de ordenar',d_dict)
+                    s_dict = d_dict.copy()
+                    l_value = 0.0
+                    for k in s_dict:
+                        s_dict[k] += l_value
+                        l_value = s_dict[k]
+                    #print('depois de somar',s_dict,'\n\n')
 
-                s_dict = d_dict.copy()
-                l_value = 0.0
-                for k in s_dict:
-                    s_dict[k] += l_value
-                    l_value = s_dict[k]
-                #print('depois de somar',s_dict,'\n\n')
-
-                # update sample
-                rand = numbers.pop()
-                for k in s_dict:
-                    if rand <= s_dict[k] and v not in evidence:
-                        sample[v] = k
+                    # update sample
+                    rand = numbers.pop()
+                    for k in s_dict:
+                        if rand <= s_dict[k] and v not in evidence:
+                            sample[v] = k
                     
             print(sample)
             i+=1
@@ -299,11 +318,13 @@ class BayesianNetwork:
                 results[var.name] = new_prob.copy()
               
             # for plots
-            if not query and self.file == 'asia.bif':
-                    df = df.append(results,ignore_index=True)
+            if not query:
+                    df = df.append(results.copy(),ignore_index=True)
                 
-        if not query and self.file == 'asia.bif':
-            df = df.applymap(lambda x : x['yes'])
+        if not query:
+            for m in monitor:
+                df[m] = df[m].apply(lambda x : x[monitor[m]])
+                #df = df.applymap(lambda x : x['yes'])
         
         for k in results:
             for v in results[k]:
@@ -336,6 +357,7 @@ from scipy.spatial import distance
 import random
 import pandas as pd
 from difflib import SequenceMatcher
+random.seed(7)
             
 # bn = BayesianNetwork(file='earthquake.bif')  # example usage for the supplied earthquake.bif file
 # for v in bn.variables:
