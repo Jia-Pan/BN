@@ -156,19 +156,13 @@ class BayesianNetwork:
         mb = dict()
         for v in self.variables:
             mb[v.name] = set()
-            
             mb[v.name].add(v.name)
-
 
         for v in self.variables:
 
             for p in v.parents:
                 mb[v.name].add(p)
                 mb[p].add(v.name)
-                #for p1 in v.parents:
-                #    if p != p1:
-                #        mb[p].add(p1)
-                #        mb[p1].add(p)
 
         for v in self.variables:
             v.markov_blanket = list(mb[v.name])
@@ -182,11 +176,9 @@ class BayesianNetwork:
             s[v.name] = random.choice(v.domain)
         return s
     
-    
-    def generate_numbers(self,size):
-        size = size * len(self.variables)
-        return [random.uniform(0,1) for x in range(size)]
-        #return [random.random() for x in range(t_size)]
+
+    def get_random_number(self):
+        return random.uniform(0,1) 
        
     
     def generate_monitor(self):
@@ -196,29 +188,30 @@ class BayesianNetwork:
         return tmp
     
     
-    def gibbs_sampling(self,iterations=10000, warm_up=100, evidence={}, query=False, debug=False):
+    def gibbs_sampling(self,iterations=100, warm_up=1000, evidence={}, query=False, debug=False):
         
         self.parse_file() # reset probabilities
         
         iterations += warm_up
-        numbers = self.generate_numbers(iterations)
         sample = self.generate_sample(evidence)
-        prev_sample = sample.copy()
         monitor = self.generate_monitor()
-        #print(numbers)
-        df = pd.DataFrame()
-          
-        print(sample)
-          
-        
-        i = 0
+        percentages = []
+
         results = dict()
-        
+        columns = set()
+       
+        for var in self.variables:
+            columns.add(var.name)
+            results[var.name] = dict()
+            for d in var.domain:
+                results[var.name][d] = 0
+                
+        i = 0
         samples = dict()
         samples[i] = sample.copy()
         
         while i < iterations: 
-            print(i, end='\r')
+            if debug : print(i, end='\r')
             
             for v in sample: # for each random value in the sample
                 if v not in evidence:
@@ -230,13 +223,11 @@ class BayesianNetwork:
                         n = self.get_variable(node)
 
                         if len(n.parents) == 0: # has no parents
+                          
                             probs.append(n.probabilities) if v == n.name else probs.append(n.probabilities[sample[n.name]])
-
+                            #if cur.name == 'O' : print(cur.name, node, probs)
+                            
                         elif len(n.parents) > 0: # has parents
-                            
-                            
-                            #  {('yes',): {'yes': 0.98, 'no': 0.02}, ('no',): {'yes': 0.05, 'no': 0.95}} 
-                            
                             
                             if v in n.parents: # main node is part of parents of markov blanket node
                                 tmp1 = dict()
@@ -245,11 +236,12 @@ class BayesianNetwork:
                                     tmp = []
                                     for par in n.parents:
                                         tmp.append(d) if par == v else tmp.append(sample[par])
+                                        #if cur.name == 'O' : print(cur.name, node, probs)
                                         
                                     tmp1[d] = n.get_probability(tmp)[sample[node]]
                                     denom += tmp1[d]
                                 
-                                #if denom == 0.0 : denom = 1.0  
+                                if denom == 0.0 : denom = 1.0  
                                     
                                 for d in cur.domain: 
                                     tmp1[d] /= denom
@@ -259,17 +251,18 @@ class BayesianNetwork:
                                 tmp = []
                                 for par in n.parents:
                                     tmp.append(sample[par])
-                                
-                                probs.append(n.get_probability(tmp))
-                                
-                    #print(v)
-                    #print(probs)
+                                if node == v:
+                                    probs.append(n.get_probability(tmp))
+                                else:
+                                    probs.append(n.get_probability(tmp)[sample[node]])
+                                #if cur.name == 'O' : print(cur.name, node, probs)
 
                     denom = 0.0
                     d_dict = dict()
                     for d in cur.domain:
                         tmp = 1.0
                         for p in probs:
+                            #print(cur.name, p)
                             if type(p)==type({}): # if p is a dictonary, get a value
                                 tmp *= p[d]
                             else:
@@ -280,7 +273,7 @@ class BayesianNetwork:
 
                     #print(v)
                     #print('antes de normalizar',d_dict)
-                    #if denom == 0.0: denom = 1.0
+                    if denom == 0.0: denom = 1.0
                     for d in d_dict:
                         d_dict[d] /= denom
                     #print('depois de normalizar',d_dict)    
@@ -293,42 +286,40 @@ class BayesianNetwork:
                     for k in s_dict:
                         s_dict[k] += l_value
                         l_value = s_dict[k]
-                    #print('depois de somar',s_dict,'\n\n')
+                    #print(v)
+                    #print('depois de somar',s_dict)
 
                     # update sample
-                    rand = numbers.pop()
+                    rand = self.get_random_number()
+                    #print(rand)
                     for k in s_dict:
-                        if rand <= s_dict[k]:
+                        if round(rand,2) <= round(s_dict[k],2):
                             sample[v] = k
+                            #print(sample[v], '\n\n')
+                            break
                     
-            print(sample)
+            #print(sample)
             i+=1
             
-            samples[i] = sample.copy()     
+            samples[i] = sample.copy()
             
-            results = dict()
-            for var in self.variables:
-                new_prob = dict()
-                for d in var.domain:
-                    new_prob[d] = 0.0
-                    for samp in samples:
-                        if samples[samp][var.name] == d:
-                            new_prob[d] += 1.0
-                    new_prob[d] /= len(samples)
-                results[var.name] = new_prob.copy()
-              
-            # for plots
+            for var in sample:
+                results[var][sample[var]] += 1
+            
             if not query:
-                df = df.append(results.copy(),ignore_index=True)
-                
-        if not query:
-            for m in monitor:
-                df[m] = df[m].apply(lambda x : x[monitor[m]])
-                #df = df.applymap(lambda x : x['yes'])
+                tmp = []
+                for var in results:
+                    #tmp[var] = results[var][monitor[var]] / i
+                    tmp.append(results[var][monitor[var]] / i)
+                percentages.append(tmp)
+                #df = df.append(tmp,ignore_index=True)
+            #df.loc[len(df)] = tmp
+        
+        df = pd.DataFrame(percentages, columns=columns)
         
         for k in results:
             for v in results[k]:
-                results[k][v] = round(results[k][v],2)
+                results[k][v] = round(results[k][v]/i,2)
                 
         return results, df
     

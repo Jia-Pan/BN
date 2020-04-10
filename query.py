@@ -10,7 +10,7 @@ def main():
         if file == 'exit':
             return
         if file == '':
-            file = 'asia.bif'
+            file = 'bifs/asia.bif'
         if not path.exists(file):
             print('File not found!')
         else: 
