@@ -143,45 +143,64 @@ class BayesianNetwork:
     
     
     '''
-    The methods listed below where written for the assignment
+    The methods below where written for the assignment
     '''
 
 
     def define_markov_blankets(self):
         '''
         In a Bayesian network, the Markov blanket of a node includes its parents,
-         children and the other parents of all of its children.
+         children and the other parents of all of its children. However here we only
+         take into account the nodes directly connected to a certain node, including itself.
         '''
         
         mb = dict()
-        for v in self.variables:
+        for v in self.variables: # for each variable
             mb[v.name] = set()
-            mb[v.name].add(v.name)
+            mb[v.name].add(v.name) # add itself to the list
+            
+            for p in v.parents: # for each parent
+                mb[v.name].add(p) # add the parent
+                mb[p].add(v.name) # add itself to the parent mb
 
-        for v in self.variables:
-
-            for p in v.parents:
-                mb[v.name].add(p)
-                mb[p].add(v.name)
-
-        for v in self.variables:
+        for v in self.variables:            
             v.markov_blanket = list(mb[v.name])
             
             
     def generate_sample(self,evidence):
+        '''
+        Generates a random value for each variable that is not evidence
+        
+        :param evidence: existing evidence
+        :return: a dict
+        '''
+        
         s = dict()
         for v in self.variables:
             if v.name in evidence:
-                s[v.name] = evidence[v.name]
-            s[v.name] = random.choice(v.domain)
+                s[v.name] = evidence[v.name]  
+            else: 
+                s[v.name] = random.choice(v.domain)
+            
         return s
     
 
     def get_random_number(self):
+        '''
+        Returns a random float uniformly between 0 and 1
+        
+        :return: a random float
+        '''
         return random.uniform(0,1) 
        
     
     def generate_monitor(self):
+        '''
+        Generates a dict where each key is a variable name and its value
+        to be monitered throughout the iterations
+        
+        :return: a dictionary
+        '''
         tmp = dict()
         for v in self.variables:
             tmp[v.name] = random.choice(v.domain)
@@ -189,165 +208,199 @@ class BayesianNetwork:
     
     
     def gibbs_sampling(self,iterations=100, warm_up=1000, evidence={}, query=False, debug=False):
+        '''
+        The sampling algorithm.
         
-        self.parse_file() # reset probabilities
+        :param iterations: number of iterations
+        :param warm_up: minimum number of iterations
+        :param evidence: pre-existing evidence
+        :param query: if it's a query calling the function or not
+        :param debug: print extra stuff or not
+        '''
         
-        iterations += warm_up
+        iterations += warm_up 
+        
         sample = self.generate_sample(evidence)
+        if debug: print('Initial sample :', sample)
+            
         monitor = self.generate_monitor()
-        percentages = []
+        if debug: print('Monitor :', monitor)
+        
+        # list of lists where each list contains 
+        # probabilities for each iteration
+        percentages = [] 
 
-        results = dict()
-        columns = set()
+        # save the number of time a value has appeared 
+        # in the sample for each variable
+        results = dict() 
+        
+        # list of names
+        columns = list()
        
+        # initialize results dict
         for var in self.variables:
-            columns.add(var.name)
+            columns.append(var.name)
             results[var.name] = dict()
             for d in var.domain:
                 results[var.name][d] = 0
                 
-        i = 0
-        samples = dict()
-        samples[i] = sample.copy()
+        i = 0 # current iteration number
+        samples = dict() # all samples, keys are iteration number
+        samples[i] = sample.copy() # add first sample
         
         while i < iterations: 
             if debug : print(i, end='\r')
             
-            for v in sample: # for each random value in the sample
-                if v not in evidence:
+            for v in sample: 
+                
+                if v not in evidence: 
+                    
                     cur = self.get_variable(v)
                     mb = cur.markov_blanket
 
-                    probs = []
+                    # list of probablities needed to calculate
+                    # new value for current node
+                    probs = [] 
+                    
                     for node in mb: # for every node in the markov blanket
                         n = self.get_variable(node)
-
+                        
                         if len(n.parents) == 0: # has no parents
-                          
-                            probs.append(n.probabilities) if v == n.name else probs.append(n.probabilities[sample[n.name]])
-                            #if cur.name == 'O' : print(cur.name, node, probs)
+                            
+                            if v == n.name: #if its main node, get probabilities diretcly
+                                probs.append(n.probabilities)  
+                            else: # get probabilities using the sample
+                                probs.append(n.probabilities[sample[n.name]])
                             
                         elif len(n.parents) > 0: # has parents
                             
+                            
                             if v in n.parents: # main node is part of parents of markov blanket node
-                                tmp1 = dict()
+                                
+                                # due to the structure of the probabilities object 
+                                # we need to get the probabilities for all 
+                                # possible values and then normalize
+                                
+                                nom = dict() # probabilites for each possible value
                                 denom = 0.0
                                 for d in cur.domain:
                                     tmp = []
                                     for par in n.parents:
-                                        tmp.append(d) if par == v else tmp.append(sample[par])
-                                        #if cur.name == 'O' : print(cur.name, node, probs)
-                                        
-                                    tmp1[d] = n.get_probability(tmp)[sample[node]]
-                                    denom += tmp1[d]
-                                
-                                if denom == 0.0 : denom = 1.0  
+                                        if par == v: # if parent is main node, get for possible domain d
+                                            tmp.append(d)  
+                                        else: # otherwise, get value from sample
+                                            tmp.append(sample[par])
                                     
+                                    # get probabilities for parents values
+                                    nom[d] = n.get_probability(tmp)[sample[node]]
+                                    
+                                    # sum probabilities to the denominator
+                                    denom += nom[d]
+                                
+                                # sometimes the doniminator is 0
+                                # so in order to avoid division by 0
+                                # turn that into 1
+                                if denom == 0.0: 
+                                    denom = 1.0  
+                                    
+                                #normalize values
                                 for d in cur.domain: 
-                                    tmp1[d] /= denom
-                                probs.append(tmp1)
+                                    nom[d] /= denom
+                                
+                                # add values to probabilities list
+                                probs.append(nom)
                                         
-                            else:
+                            else: # if main node is not part of parents
                                 tmp = []
+                                
+                                # get parent values from sample
                                 for par in n.parents:
                                     tmp.append(sample[par])
+                                
+                                # get probabilities according to parent values
                                 if node == v:
                                     probs.append(n.get_probability(tmp))
                                 else:
                                     probs.append(n.get_probability(tmp)[sample[node]])
-                                #if cur.name == 'O' : print(cur.name, node, probs)
 
                     denom = 0.0
-                    d_dict = dict()
-                    for d in cur.domain:
-                        tmp = 1.0
-                        for p in probs:
-                            #print(cur.name, p)
-                            if type(p)==type({}): # if p is a dictonary, get a value
+                    
+                    # dictionary containing probability of node for each value
+                    d_dict = dict() 
+                    
+                    for d in cur.domain: # for each possible value of current node
+                        tmp = 1.0 
+                        for p in probs: # and for each probability 
+                            
+                            if type(p)==type({}): # if p is a dictonary, get probability for value d
                                 tmp *= p[d]
-                            else:
+                            else: # if p is a number, multiply directly
                                 tmp *= p
+                        
+                        # probabilty for value d 
                         d_dict[d] = tmp
+                        
+                        # add that probabilty to the denominator
                         denom += tmp
 
-
-                    #print(v)
-                    #print('antes de normalizar',d_dict)
-                    if denom == 0.0: denom = 1.0
+                    # sometimes the doniminator is 0
+                    # so in order to avoid division by 0
+                    # turn that into 1    
+                    if denom == 0.0: 
+                        denom = 1.0
+                    
+                    # normalize
                     for d in d_dict:
                         d_dict[d] /= denom
-                    #print('depois de normalizar',d_dict)    
 
+                    # order probabilites from higher to lower    
                     d_dict = {k: v for k, v in sorted(d_dict.items(), key=lambda item: item[1], reverse=True)}
-                    #print('depois de ordenar',d_dict)
 
+                    # sum values from higher to lower so last value is equal to 1
                     s_dict = d_dict.copy()
                     l_value = 0.0
                     for k in s_dict:
                         s_dict[k] += l_value
                         l_value = s_dict[k]
-                    #print(v)
-                    #print('depois de somar',s_dict)
 
                     # update sample
                     rand = self.get_random_number()
-                    #print(rand)
                     for k in s_dict:
-                        if round(rand,2) <= round(s_dict[k],2):
+                        
+                        # if random value fits in the probability, 
+                        # update sample and leave loop
+                        if rand <= s_dict[k]:
                             sample[v] = k
-                            #print(sample[v], '\n\n')
                             break
-                    
-            #print(sample)
+            
             i+=1
             
+            # add new sample to sample list
             samples[i] = sample.copy()
             
+            # update counts in results
             for var in sample:
                 results[var][sample[var]] += 1
             
+            # calculate probabilities for this iteration
             if not query:
                 tmp = []
                 for var in results:
-                    #tmp[var] = results[var][monitor[var]] / i
                     tmp.append(results[var][monitor[var]] / i)
                 percentages.append(tmp)
-                #df = df.append(tmp,ignore_index=True)
-            #df.loc[len(df)] = tmp
-        
+
         df = pd.DataFrame(percentages, columns=columns)
         
+        # calculate final probabilities
         for k in results:
             for v in results[k]:
                 results[k][v] = round(results[k][v]/i,2)
                 
         return results, df
-    
-    
-    def exists(self,name):
-        exists = False
-        for v in self.variables:
-            if name == v.name:
-                return True
-        return False
-    
-    
-    def has_domain(self,name,value):
-        v = self.get_variable(name)
-        if value in v.domain:
-            return True
-        return False
-    
-    
-    def similar(self,a, b):
-        return SequenceMatcher(None, a, b).ratio()
             
-            
-                
-from scipy.spatial import distance
+# our imports            
 import random
 import pandas as pd
-from difflib import SequenceMatcher
 random.seed(7)
             
 # bn = BayesianNetwork(file='earthquake.bif')  # example usage for the supplied earthquake.bif file
