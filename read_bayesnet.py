@@ -159,6 +159,7 @@ class BayesianNetwork:
             mb[v.name] = set()
             mb[v.name].add(v.name) # add itself to the list
             
+        for v in self.variables: # for each variable
             for p in v.parents: # for each parent
                 mb[v.name].add(p) # add the parent
                 mb[p].add(v.name) # add itself to the parent mb
@@ -388,6 +389,7 @@ class BayesianNetwork:
                 for var in results:
                     tmp.append(results[var][monitor[var]] / i)
                 percentages.append(tmp)
+           
 
         df = pd.DataFrame(percentages, columns=columns)
         
