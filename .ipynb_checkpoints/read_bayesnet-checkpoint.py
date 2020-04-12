@@ -217,6 +217,8 @@ class BayesianNetwork:
         :param evidence: pre-existing evidence
         :param query: if it's a query calling the function or not
         :param debug: print extra stuff or not
+        
+        :return: a dictionary with final probabilities and a df with history
         '''
         
         iterations += warm_up 
@@ -399,6 +401,36 @@ class BayesianNetwork:
                 results[k][v] = round(results[k][v]/i,2)
                 
         return results, df
+    
+    
+    def exists(self,name):
+        '''
+        Verifies whether a variable name exists in the net
+        
+        :param name: name of the node
+        
+        :return: a node
+        '''
+        exists = False
+        for v in self.variables:
+            if name == v.name:
+                return True
+        return False
+    
+    
+    def has_domain(self,name,value):
+        '''
+        Verifies whether a variable as a given value
+        
+        :param name: name of the node
+        :param value: name of the value
+        
+        :return: a bool
+        '''
+        v = self.get_variable(name)
+        if value in v.domain:
+            return True
+        return False
             
 # our imports            
 import random
